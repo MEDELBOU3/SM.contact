@@ -6,10 +6,13 @@
     <title>SM.contact</title>
     <meta name='viewport' content='width=device-width, initial-scale=1'>
     <style>
-        body{
+       body{
             background:#0F2027;
-            background:-webkit-linear-gradient(to right, #2C5364, #203A43, #0F2027) ;
+            background:-webkit-linear-gradient(to right, #2C5364, #203A43, #0F2027);
             background: linear-gradient(to right, #2C5364, #203A43, #0F2027);
+            margin: 0;
+            padding: 0;
+            overflow-x: hidden;
         }
         
         #join-btn{
@@ -23,56 +26,203 @@
         }
         
         #video-streams{
-            display:grid;
-            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
-            height: 90vh;
-            width: 1400px;
-            margin:0 auto;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1rem;
+            padding: 1rem;
+            height: calc(100vh - 100px);
+            transition: all 0.3s ease;
         }
-        
+
+        #video-streams.screen-share-active {
+            grid-template-columns: 1fr 300px;
+        }
+
+        #video-streams.screen-share-active.expanded {
+            grid-template-columns: 1fr;
+        }
+
         .video-container{
-            max-height: 100%;
-            border: 2px solid black;
             background-color: #203A49;
+            border-radius: 8px;
+            overflow: hidden;
+            position: relative;
         }
-        
+
+        .video-container.screen-share {
+            grid-column: 1;
+            grid-row: 1;
+        }
+
+        .video-container.participant {
+            aspect-ratio: 16/9;
+        }
+
         .video-player{
             height: 100%;
             width: 100%;
+            object-fit: cover;
         }
-        
+
+        .video-container .controls-overlay {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(0,0,0,0.5);
+            padding: 10px;
+            display: none;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .video-container:hover .controls-overlay {
+            display: flex;
+        }
+
+        .participants-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 0.5rem;
+            max-height: 100%;
+            overflow-y: auto;
+        }
+
         button{
-            border:none;
+            border: none;
             background-color: cadetblue;
-            color:#fff;
-            padding:10px 20px;
-            font-size:16px;
-            margin:2px;
+            color: #fff;
+            padding: 10px 20px;
+            font-size: 16px;
+            margin: 2px;
             cursor: pointer;
+            border-radius: 4px;
+            transition: all 0.3s ease;
+        }
+
+        button:hover {
+            background-color: #457b9d;
         }
         
         button:disabled {
             background-color: #888;
             cursor: not-allowed;
         }
+
+        .control-btn {
+            padding: 8px;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
         
         #stream-controls{
             display: none;
             justify-content: center;
-            margin-top:0.5em;
+            align-items: center;
+            padding: 1rem;
+            background: rgba(0,0,0,0.2);
+            backdrop-filter: blur(5px);
+            position: fixed;
+            bottom: 0;
+            width: 100%;
         }
-        
-        @media screen and (max-width:1400px){
-            #video-streams{
-                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-                width: 95%;
-            }
+
+        .user-name {
+            position: absolute;
+            left: 10px;
+            top: 10px;
+            color: white;
+            background: rgba(0,0,0,0.5);
+            padding: 5px 10px;
+            border-radius: 4px;
+        }
+
+        .expand-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(0,0,0,0.5);
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            display: none;
+        }
+
+        .screen-share .expand-btn {
+            display: block;
+        }
+
+        /* Chat sidebar */
+        #chat-sidebar {
+            position: fixed;
+            right: -300px;
+            top: 0;
+            width: 300px;
+            height: 100vh;
+            background: rgba(0,0,0,0.8);
+            transition: right 0.3s ease;
+            color: white;
+            padding: 1rem;
+        }
+
+        #chat-sidebar.active {
+            right: 0;
+        }
+
+        #chat-messages {
+            height: calc(100vh - 150px);
+            overflow-y: auto;
+            margin-bottom: 1rem;
+        }
+
+        .chat-input-container {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        #chat-input {
+            flex: 1;
+            padding: 0.5rem;
+            border-radius: 4px;
+            border: none;
+        }
+
+        /* Statistics overlay */
+        .stats-overlay {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            padding: 5px;
+            border-radius: 4px;
+            font-size: 12px;
+            display: none;
+        }
+
+        .video-container:hover .stats-overlay {
+            display: block;
+        }
+
+        /* Animations */
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .fade-in {
+            animation: fadeIn 0.3s ease;
         }
     </style>
 </head>
 <body>
 
-   
     <button id="join-btn">Join Stream</button>
 
     <div id="stream-wrapper">
@@ -80,11 +230,28 @@
 
         <div id="stream-controls">
             <button id="leave-btn">Leave Stream</button>
-            <button id="mic-btn">Mic On</button>
-            <button id="camera-btn">Camera on</button>
-            <button id="screen-btn">Share Screen</button>
+            <button id="mic-btn" class="control-btn">🎤</button>
+            <button id="camera-btn" class="control-btn">📹</button>
+            <button id="screen-btn" class="control-btn">📺</button>
+            <button id="chat-btn" class="control-btn">💬</button>
+            <button id="settings-btn" class="control-btn">⚙️</button>
+            <select id="quality-select">
+                <option value="high">High Quality</option>
+                <option value="medium">Medium Quality</option>
+                <option value="low">Low Quality</option>
+            </select>
         </div>
     </div>
+
+    <div id="chat-sidebar">
+        <h3>Chat</h3>
+        <div id="chat-messages"></div>
+        <div class="chat-input-container">
+            <input type="text" id="chat-input" placeholder="Type a message...">
+            <button id="send-message-btn">Send</button>
+        </div>
+    </div>
+    
     
 </body>
 <!-- <script src="https://download.agora.io/sdk/release/AgoraRTC_N.js"></script> -->
