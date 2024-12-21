@@ -6,11 +6,12 @@ const client = AgoraRTC.createClient({mode:'rtc', codec:'vp8'})
 
 let localTracks = []
 let remoteUsers = {}
+let screenTrack = null
+let isScreenSharing = false
+let screenSharingUid = null
 
 let joinAndDisplayLocalStream = async () => {
-
     client.on('user-published', handleUserJoined)
-    
     client.on('user-left', handleUserLeft)
     
     let UID = await client.join(APP_ID, CHANNEL, TOKEN, null)
@@ -49,6 +50,12 @@ let handleUserJoined = async (user, mediaType) => {
         document.getElementById('video-streams').insertAdjacentHTML('beforeend', player)
 
         user.videoTrack.play(`user-${user.uid}`)
+        
+        // Disable screen share button if someone else is sharing
+        if(user.videoTrack.trackMediaType === 'screen-video') {
+            screenSharingUid = user.uid
+            document.getElementById('screen-btn').disabled = true
+        }
     }
 
     if (mediaType === 'audio'){
@@ -59,12 +66,23 @@ let handleUserJoined = async (user, mediaType) => {
 let handleUserLeft = async (user) => {
     delete remoteUsers[user.uid]
     document.getElementById(`user-container-${user.uid}`).remove()
+    
+    // Re-enable screen share button if the user who was sharing left
+    if(user.uid === screenSharingUid) {
+        screenSharingUid = null
+        document.getElementById('screen-btn').disabled = false
+    }
 }
 
 let leaveAndRemoveLocalStream = async () => {
     for(let i = 0; localTracks.length > i; i++){
         localTracks[i].stop()
         localTracks[i].close()
+    }
+    
+    if(screenTrack) {
+        screenTrack.stop()
+        screenTrack.close()
     }
 
     await client.leave()
@@ -97,7 +115,41 @@ let toggleCamera = async (e) => {
     }
 }
 
+let toggleScreenShare = async (e) => {
+    if(!isScreenSharing) {
+        screenTrack = await AgoraRTC.createScreenVideoTrack()
+        await client.unpublish([localTracks[1]])
+        await client.publish([screenTrack])
+        
+        screenTrack.on('track-ended', async () => {
+            await client.unpublish([screenTrack])
+            screenTrack.stop()
+            screenTrack.close()
+            screenTrack = null
+            await client.publish([localTracks[1]])
+            isScreenSharing = false
+            e.target.innerText = 'Share Screen'
+            e.target.style.backgroundColor = 'cadetblue'
+        })
+        
+        isScreenSharing = true
+        e.target.innerText = 'Stop Sharing'
+        e.target.style.backgroundColor = '#EE4B2B'
+    } else {
+        await client.unpublish([screenTrack])
+        screenTrack.stop()
+        screenTrack.close()
+        screenTrack = null
+        await client.publish([localTracks[1]])
+        isScreenSharing = false
+        e.target.innerText = 'Share Screen'
+        e.target.style.backgroundColor = 'cadetblue'
+    }
+}
+
 document.getElementById('join-btn').addEventListener('click', joinStream)
 document.getElementById('leave-btn').addEventListener('click', leaveAndRemoveLocalStream)
 document.getElementById('mic-btn').addEventListener('click', toggleMic)
 document.getElementById('camera-btn').addEventListener('click', toggleCamera)
+document.getElementById('screen-btn').addEventListener('click', toggleScreenShare)
+ 
