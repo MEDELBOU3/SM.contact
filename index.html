@@ -51,6 +51,11 @@
             cursor: pointer;
         }
         
+        button:disabled {
+            background-color: #888;
+            cursor: not-allowed;
+        }
+        
         #stream-controls{
             display: none;
             justify-content: center;
@@ -67,6 +72,7 @@
 </head>
 <body>
 
+   
     <button id="join-btn">Join Stream</button>
 
     <div id="stream-wrapper">
@@ -76,6 +82,7 @@
             <button id="leave-btn">Leave Stream</button>
             <button id="mic-btn">Mic On</button>
             <button id="camera-btn">Camera on</button>
+            <button id="screen-btn">Share Screen</button>
         </div>
     </div>
     
