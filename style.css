@@ -200,3 +200,84 @@
             }
         }
  
+.participants-list {
+            padding: 15px;
+            border-top: 1px solid #ddd;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .participant {
+            display: flex;
+            align-items: center;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .participant:hover {
+            background: #f0f2f5;
+        }
+
+        .participant.online {
+            border-right: 4px solid #28a745;
+        }
+
+        .participant.offline {
+            border-right: 4px solid #dc3545;
+        }
+
+        .participant-actions {
+            margin-right: auto;
+            display: flex;
+            gap: 5px;
+        }
+
+        .action-btn {
+            padding: 5px 10px;
+            border-radius: 15px;
+            border: none;
+            cursor: pointer;
+            font-size: 12px;
+            background: #0084ff;
+            color: white;
+        }
+
+        .action-btn:hover {
+            background: #0073e6;
+        }
+
+        .status-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-left: 10px;
+        }
+
+        .status-online {
+            background: #28a745;
+        }
+
+        .status-offline {
+            background: #dc3545;
+        }
+
+        .call-notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            display: none;
+            z-index: 1000;
+        }
+
+        .call-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
