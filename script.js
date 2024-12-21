@@ -1,9 +1,12 @@
-   let peerConnections = {};
+ let peerConnections = {};
         let localStream = null;
         let screenStream = null;
         let ws = null;
-        let roomId = new URLSearchParams(window.location.search).get('room') || Math.random().toString(36).substring(7);
-        let clientId = null;
+        let currentRoom = null;
+        let selectedUser = null;
+        let localUserId = null;
+        let onlineUsers = new Map();
+        let currentCall = null;
 
         const configuration = {
             iceServers: [
@@ -19,187 +22,234 @@
 
         async function init() {
             try {
+                await setupWebSocket();
+                await setupLocalMedia();
+                setupEventListeners();
+                updateParticipantsList();
+            } catch (error) {
+                console.error('Initialization error:', error);
+                alert('حدث خطأ أثناء تهيئة التطبيق');
+            }
+        }
+
+        async function setupWebSocket() {
+            return new Promise((resolve, reject) => {
+                ws = new WebSocket(`wss://${window.location.hostname}:3000`);
+
+                ws.onopen = () => {
+                    console.log('WebSocket Connected');
+                    resolve();
+                };
+
+                ws.onmessage = handleWebSocketMessage;
+                ws.onerror = reject;
+                ws.onclose = handleWebSocketClose;
+            });
+        }
+
+        async function setupLocalMedia() {
+            try {
                 localStream = await navigator.mediaDevices.getUserMedia({
                     video: true,
                     audio: true
                 });
-                
-                addVideoStream('local', localStream, true);
-                connectWebSocket();
-                setupEventListeners();
+                document.getElementById('localVideo').srcObject = localStream;
             } catch (error) {
-                console.error('Media device error:', error);
-                alert('فشل في الوصول إلى الكاميرا والميكروفون');
+                console.error('Media access error:', error);
+                throw new Error('فشل في الوصول إلى الكاميرا والميكروفون');
             }
         }
 
-        function connectWebSocket() {
-            ws = new WebSocket(`wss://${window.location.hostname}:3000`);
+        async function handleWebSocketMessage(event) {
+            const data = JSON.parse(event.data);
+            console.log('Received message:', data);
 
-            ws.onopen = () => {
-                console.log('WebSocket Connected');
-                ws.send(JSON.stringify({
-                    type: 'join_room',
-                    roomId: roomId
-                }));
-            };
-
-            ws.onmessage = async (event) => {
-                const data = JSON.parse(event.data);
-                handleWebSocketMessage(data);
-            };
-
-            ws.onclose = () => {
-                console.log('WebSocket Disconnected');
-                setTimeout(connectWebSocket, 1000);
-            };
-        }
-
-        function addVideoStream(userId, stream, isLocal = false) {
-            const videoGrid = document.getElementById('videoGrid');
-            const videoContainer = document.createElement('div');
-            videoContainer.className = 'video-container';
-            videoContainer.id = `video-${userId}`;
-
-            const video = document.createElement('video');
-            video.srcObject = stream;
-            video.autoplay = true;
-            video.playsInline = true;
-            if (isLocal) video.muted = true;
-
-            const label = document.createElement('div');
-            label.className = 'video-label';
-            label.textContent = isLocal ? 'أنت' : `مستخدم ${userId}`;
-
-            videoContainer.appendChild(video);
-            videoContainer.appendChild(label);
-            videoGrid.appendChild(videoContainer);
-        }
-
-        async function createPeerConnection(userId) {
-            const pc = new RTCPeerConnection(configuration);
-            peerConnections[userId] = pc;
-
-            pc.onicecandidate = (event) => {
-                if (event.candidate) {
-                    ws.send(JSON.stringify({
-                        type: 'ice-candidate',
-                        candidate: event.candidate,
-                        targetUserId: userId
-                    }));
-                }
-            };
-
-            pc.ontrack = (event) => {
-                if (!document.getElementById(`video-${userId}`)) {
-                    addVideoStream(userId, event.streams[0]);
-                }
-            };
-
-            localStream.getTracks().forEach(track => {
-                pc.addTrack(track, localStream);
-            });
-
-            return pc;
-        }
-
-        async function handleWebSocketMessage(data) {
             switch(data.type) {
-                case 'connected':
-                    clientId = data.clientId;
+                case 'user_list':
+                    updateOnlineUsers(data.users);
                     break;
 
                 case 'user_joined':
-                    const pc = await createPeerConnection(data.clientId);
-                    const offer = await pc.createOffer();
-                    await pc.setLocalDescription(offer);
-                    ws.send(JSON.stringify({
-                        type: 'offer',
-                        offer: offer,
-                        targetUserId: data.clientId
-                    }));
-                    break;
-
-                case 'offer':
-                    const peerConnection = await createPeerConnection(data.clientId);
-                    await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
-                    const answer = await peerConnection.createAnswer();
-                    await peerConnection.setLocalDescription(answer);
-                    ws.send(JSON.stringify({
-                        type: 'answer',
-                        answer: answer,
-                        targetUserId: data.clientId
-                    }));
-                    break;
-
-                case 'answer':
-                    await peerConnections[data.clientId].setRemoteDescription(
-                        new RTCSessionDescription(data.answer)
-                    );
-                    break;
-
-                case 'ice-candidate':
-                    if (peerConnections[data.clientId]) {
-                        await peerConnections[data.clientId].addIceCandidate(
-                            new RTCIceCandidate(data.candidate)
-                        );
-                    }
+                    handleUserJoined(data);
                     break;
 
                 case 'user_left':
-                    removeVideoStream(data.clientId);
+                    handleUserLeft(data);
                     break;
 
-                case 'chat':
-                    addChatMessage(data);
+                case 'call_request':
+                    handleCallRequest(data);
+                    break;
+
+                case 'call_accepted':
+                    handleCallAccepted(data);
+                    break;
+
+                case 'call_rejected':
+                    handleCallRejected(data);
+                    break;
+
+                case 'offer':
+                    handleOffer(data);
+                    break;
+
+                case 'answer':
+                    handleAnswer(data);
+                    break;
+
+                case 'ice-candidate':
+                    handleIceCandidate(data);
+                    break;
+
+                case 'chat_message':
+                    handleChatMessage(data);
+                    break;
+
+                case 'screen_share_started':
+                    handleScreenShareStarted(data);
+                    break;
+
+                case 'screen_share_stopped':
+                    handleScreenShareStopped(data);
                     break;
             }
         }
 
-        function setupEventListeners() {
-            document.getElementById('toggleVideo').addEventListener('click', toggleVideo);
-            document.getElementById('toggleAudio').addEventListener('click', toggleAudio);
-            document.getElementById('shareScreen').addEventListener('click', toggleScreenShare);
-            document.getElementById('endCall').addEventListener('click', endCall);
-            document.getElementById('sendMessage').addEventListener('click', sendChatMessage);
-            document.getElementById('shareFile').addEventListener('click', () => {
-                document.getElementById('fileInput').click();
-            });
-            document.getElementById('fileInput').addEventListener('change', handleFileShare);
-        }
-
-        function toggleVideo() {
-            const videoTrack = localStream.getVideoTracks()[0];
-            videoTrack.enabled = !videoTrack.enabled;
-            document.getElementById('toggleVideo').classList.toggle('active');
-        }
-
-        function toggleAudio() {
-            const audioTrack = localStream.getAudioTracks()[0];
-            audioTrack.enabled = !audioTrack.enabled;
-            document.getElementById('toggleAudio').classList.toggle('active');
-        }
-
-        async function toggleScreenShare() {
-            try {
-                if (screenStream) {
-                    stopScreenShare();
-                } else {
-                    screenStream = await navigator.mediaDevices.getDisplayMedia({
-                        video: true
-                    });
-                    
-                    const videoTrack = screenStream.getVideoTracks()[0];
-                    
-                    Object.values(peerConnections).forEach(pc => {
-                        const sender = pc.getSenders().find(s => s.track.kind === 'video');
-                        sender.replaceTrack(videoTrack);
-                    });
-
-                    document.getElementById('shareScreen').classList.add('active');
-                    
-                    videoTrack.onended = stopScreenShare;
+        function updateOnlineUsers(users) {
+            onlineUsers.clear();
+            users.forEach(user => {
+                if (user.id !== localUserId) {
+                    onlineUsers.set(user.id, user);
                 }
+            });
+            updateParticipantsList();
+        }
+
+        function updateParticipantsList() {
+            const participantsList = document.getElementById('participantsList');
+            participantsList.innerHTML = '';
+
+            onlineUsers.forEach(user => {
+                const participantDiv = document.createElement('div');
+                participantDiv.className = `participant ${user.online ? 'online' : 'offline'}`;
+                participantDiv.innerHTML = `
+                    <span class="status-indicator ${user.online ? 'status-online' : 'status-offline'}"></span>
+                    <span>${user.name || user.id}</span>
+                    <div class="participant-actions">
+                        <button class="action-btn call-btn" data-userid="${user.id}">اتصال</button>
+                        <button class="action-btn chat-btn" data-userid="${user.id}">دردشة</button>
+                    </div>
+                `;
+
+                participantDiv.querySelector('.call-btn').addEventListener('click', () => {
+                    initiateCall(user.id);
+                });
+
+                participantDiv.querySelector('.chat-btn').addEventListener('click', () => {
+                    openChat(user.id);
+                });
+
+                participantsList.appendChild(participantDiv);
+            });
+        }
+
+        async function initiateCall(userId) {
+            try {
+                if (currentCall) {
+                    alert('أنت بالفعل في مكالمة');
+                    return;
+                }
+
+                currentCall = {
+                    userId: userId,
+                    type: 'video'
+                };
+
+                ws.send(JSON.stringify({
+                    type: 'call_request',
+                    targetUserId: userId
+                }));
+
+                // Show calling status
+                showCallStatus(`جاري الاتصال بـ ${onlineUsers.get(userId).name || userId}...`);
+            } catch (error) {
+                console.error('Call initiation error:', error);
+                alert('فشل في بدء المكالمة');
+            }
+        }
+
+        async function handleCallRequest(data) {
+            const caller = onlineUsers.get(data.callerId);
+            showCallNotification(`${caller.name || data.callerId} يريد الاتصال بك`, data.callerId);
+        }
+
+        function showCallNotification(message, callerId) {
+            const notification = document.getElementById('callNotification');
+            document.getElementById('callMessage').textContent = message;
+            
+            document.getElementById('acceptCall').onclick = () => acceptCall(callerId);
+            document.getElementById('rejectCall').onclick = () => rejectCall(callerId);
+            
+            notification.style.display = 'block';
+        }
+
+        async function acceptCall(callerId) {
+            try {
+                document.getElementById('callNotification').style.display = 'none';
+                currentCall = {
+                    userId: callerId,
+                    type: 'video'
+                };
+
+                const pc = await createPeerConnection(callerId);
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+
+                ws.send(JSON.stringify({
+                    type: 'call_accepted',
+                    targetUserId: callerId,
+                    offer: offer
+                }));
+            } catch (error) {
+                console.error('Accept call error:', error);
+                alert('فشل في قبول المكالمة');
+            }
+        }
+
+        function rejectCall(callerId) {
+            document.getElementById('callNotification').style.display = 'none';
+            ws.send(JSON.stringify({
+                type: 'call_rejected',
+                targetUserId: callerId
+            }));
+        }
+
+        async function shareScreen() {
+            try {
+                if (!currentCall) {
+                    alert('يجب أن تكون في مكالمة لمشاركة الشاشة');
+                    return;
+                }
+
+                screenStream = await navigator.mediaDevices.getDisplayMedia({
+                    video: true
+                });
+
+                const videoTrack = screenStream.getVideoTracks()[0];
+                
+                Object.values(peerConnections).forEach(pc => {
+                    const sender = pc.getSenders().find(s => s.track.kind === 'video');
+                    sender.replaceTrack(videoTrack);
+                });
+
+                videoTrack.onended = stopScreenShare;
+
+                ws.send(JSON.stringify({
+                    type: 'screen_share_started',
+                    targetUserId: currentCall.userId
+                }));
+
+                document.getElementById('shareScreen').classList.add('active');
             } catch (error) {
                 console.error('Screen share error:', error);
                 alert('فشل في مشاركة الشاشة');
@@ -207,94 +257,66 @@
         }
 
         function stopScreenShare() {
-            const videoTrack = localStream.getVideoTracks()[0];
-            Object.values(peerConnections).forEach(pc => {
-                const sender = pc.getSenders().find(s => s.track.kind === 'video');
-                sender.replaceTrack(videoTrack);
-            });
-            
             if (screenStream) {
                 screenStream.getTracks().forEach(track => track.stop());
+                
+                if (localStream) {
+                    const videoTrack = localStream.getVideoTracks()[0];
+                    Object.values(peerConnections).forEach(pc => {
+                        const sender = pc.getSenders().find(s => s.track.kind === 'video');
+                        sender.replaceTrack(videoTrack);
+                    });
+                }
+
+                ws.send(JSON.stringify({
+                    type: 'screen_share_stopped',
+                    targetUserId: currentCall.userId
+                }));
+
+                document.getElementById('shareScreen').classList.remove('active');
                 screenStream = null;
             }
-            
-            document.getElementById('shareScreen').classList.remove('active');
         }
 
         function sendChatMessage() {
-            const input = document.getElementById('messageInput');
-            const message = input.value.trim();
+            if (!selectedUser) {
+                alert('الرجاء اختيار مستخدم للدردشة معه');
+                return;
+            }
+
+            const messageInput = document.getElementById('messageInput');
+            const message = messageInput.value.trim();
             
             if (message) {
                 ws.send(JSON.stringify({
-                    type: 'chat',
+                    type: 'chat_message',
+                    targetUserId: selectedUser,
                     message: message
                 }));
-                
-                addChatMessage({
-                    clientId: 'أنت',
+
+                addMessageToChat({
+                    senderId: localUserId,
                     message: message,
-                    isSelf: true
+                    timestamp: Date.now()
                 });
-                
-                input.value = '';
+
+                messageInput.value = '';
             }
         }
 
-        function addChatMessage(data) {
-            const messagesDiv = document.getElementById('chatMessages');
+        function addMessageToChat(messageData) {
+            const chatMessages = document.getElementById('chatMessages');
             const messageElement = document.createElement('div');
-            messageElement.className = `message ${data.isSelf ? 'sent' : 'received'}`;
-            messageElement.textContent = `${data.clientId}: ${data.message}`;
-            messagesDiv.appendChild(messageElement);
-            messagesDiv.scrollTop = messagesDiv.scrollHeight;
-        }
+            messageElement.className = `message ${messageData.senderId === localUserId ? 'sent' : 'received'}`;
+            
+            const time = new Date(messageData.timestamp).toLocaleTimeString();
+            messageElement.innerHTML = `
+                <div class="message-content">${messageData.message}</div>
+                <div class="message-time">${time}</div>
+            `;
 
-        async function handleFileShare(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-
-            const chunkSize = 16384; // 16KB chunks
-            const fileReader = new FileReader();
-            let offset = 0;
-
-            fileReader.onload = function(e) {
-                const chunk = e.target.result;
-                ws.send(JSON.stringify({
-                    type: 'file',
-                    name: file.name,
-                    size: file.size,
-                    chunk: chunk,
-                    offset: offset
-                }));
-
-                offset += chunk.length;
-                const progress = (offset / file.size) * 100;
-                document.getElementById('fileProgress').style.width = `${progress}%`;
-
-                if (offset < file.size) {
-                    readNextChunk();
-                }
-            };
-
-            function readNextChunk() {
-                const slice = file.slice(offset, offset + chunkSize);
-                fileReader.readAsArrayBuffer(slice);
-            }
-
-            readNextChunk();
-        }
-
-        function endCall() {
-            Object.values(peerConnections).forEach(pc => pc.close());
-            if (localStream) {
-                localStream.getTracks().forEach(track => track.stop());
-            }
-            if (screenStream) {
-                screenStream.getTracks().forEach(track => track.stop());
-            }
-            ws.close();
-            window.location.href = '/';
+            chatMessages.appendChild(messageElement);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
         }
 
         // Initialize the application
