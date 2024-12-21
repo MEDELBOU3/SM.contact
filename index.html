@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>منصة المشاركة المتقدمة</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>منصة المشاركة المتقدمة</h1>
+            <div class="status-indicator">
+                <div class="status-dot" id="connectionStatus"></div>
+                <span id="statusText">غير متصل</span>
+            </div>
+        </div>
+
+        <div class="grid">
+            <div class="main-content">
+                <div class="card">
+                    <div class="controls">
+                        <button class="btn" id="startShare">
+                            <i class="fas fa-desktop"></i>
+                            بدء مشاركة الشاشة
+                        </button>
+                        <button class="btn" id="toggleAudio">
+                            <i class="fas fa-microphone"></i>
+                            تشغيل/إيقاف الصوت
+                        </button>
+                        <button class="btn" id="settings">
+                            <i class="fas fa-cog"></i>
+                            الإعدادات
+                        </button>
+                        <button class="btn btn-danger" id="endSession" disabled>
+                            <i class="fas fa-times"></i>
+                            إنهاء الجلسة
+                        </button>
+                    </div>
+
+                    <div class="screen-container">
+                        <video id="screenShare" autoplay playsinline></video>
+                    </div>
+                </div>
+
+                <div class="card file-upload" id="dropZone">
+                    <p>اسحب الملفات هنا أو انقر للاختيار</p>
+                    <input type="file" id="fileInput" multiple style="display: none">
+                </div>
+            </div>
+
+            <div class="sidebar">
+                <div class="card chat-container">
+                    <h3>الدردشة</h3>
+                    <div class="chat-messages" id="chatMessages"></div>
+                    <div class="chat-input">
+                        <input type="text" id="messageInput" placeholder="اكتب رسالتك هنا...">
+                        <button class="btn" id="sendMessage">إرسال</button>
+                    </div>
+                </div>
+
+                <div class="card participants-list">
+                    <h3>المشاركون</h3>
+                    <div id="participantsList"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="settings-panel" id="settingsPanel">
+        <div class="settings-content">
+            <h2>الإعدادات</h2>
+            <div class="quality-controls">
+                <div class="quality-option" data-quality="high">جودة عالية</div>
+                <div class="quality-option active" data-quality="medium">جودة متوسطة</div>
+                <div class="quality-option" data-quality="low">جودة منخفضة</div>
+            </div>
+            <button class="btn" id="closeSettings">إغلاق</button>
+        </div>
+    </div>
+
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="spinner"></div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
