@@ -28,11 +28,7 @@ let joinAndDisplayLocalStream = async () => {
     await client.publish([localTracks[0], localTracks[1]])
 }
 
-let joinStream = async () => {
-    await joinAndDisplayLocalStream()
-    document.getElementById('join-btn').style.display = 'none'
-    document.getElementById('stream-controls').style.display = 'flex'
-}
+
 
 let handleUserJoined = async (user, mediaType) => {
     remoteUsers[user.uid] = user 
@@ -61,6 +57,8 @@ let handleUserJoined = async (user, mediaType) => {
     if (mediaType === 'audio'){
         user.audioTrack.play()
     }
+
+    updateParticipantCount();
 }
 
 let handleUserLeft = async (user) => {
@@ -72,6 +70,8 @@ let handleUserLeft = async (user) => {
         screenSharingUid = null
         document.getElementById('screen-btn').disabled = false
     }
+
+    updateParticipantCount();
 }
 
 let leaveAndRemoveLocalStream = async () => {
@@ -152,3 +152,37 @@ document.getElementById('leave-btn').addEventListener('click', leaveAndRemoveLoc
 document.getElementById('mic-btn').addEventListener('click', toggleMic)
 document.getElementById('camera-btn').addEventListener('click', toggleCamera)
 document.getElementById('screen-btn').addEventListener('click', toggleScreenShare)
+
+// Update participant count
+function updateParticipantCount() {
+    const count = Object.keys(remoteUsers).length + 1;
+    document.getElementById('participant-number').textContent = count;
+}
+
+// Show loading overlay
+function showLoading() {
+    document.querySelector('.loading-overlay').style.display = 'flex';
+}
+
+// Hide loading overlay
+function hideLoading() {
+    document.querySelector('.loading-overlay').style.display = 'none';
+}
+
+// Modify joinStream function to show loading state
+let joinStream = async () => {
+    showLoading();
+    try {
+        await joinAndDisplayLocalStream();
+        document.getElementById('join-btn').style.display = 'none';
+        document.getElementById('stream-controls').style.display = 'flex';
+        document.querySelector('.join-container').style.display = 'none';
+    } catch (error) {
+        console.error('Error joining stream:', error);
+        alert('Failed to join stream. Please try again.');
+    } finally {
+        hideLoading();
+    }
+    updateParticipantCount();
+}
+
