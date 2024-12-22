@@ -9,365 +9,303 @@ let remoteUsers = {}
 let screenTrack = null
 let isScreenSharing = false
 let screenSharingUid = null
-let currentUser = null
-const userProfiles = new Map()
+// إضافة متغيرات جديدة
+let currentUser = null;
+const userProfiles = {};
 
-// التحقق من المصادقة
+// التحقق من وجود مستخدم مسجل
 const checkAuth = () => {
-    const userData = localStorage.getItem('userData')
-    if (userData) {
-        currentUser = JSON.parse(userData)
-        document.getElementById('auth-container').style.display = 'none'
-        document.getElementById('stream-wrapper').style.display = 'block'
-        return true
-    }
-    document.getElementById('auth-container').style.display = 'block'
-    document.getElementById('stream-wrapper').style.display = 'none'
-    return false
+const userData = localStorage.getItem('userData');
+if (userData) {
+currentUser = JSON.parse(userData);
+document.getElementById('auth-container').style.display = 'none';
+document.getElementById('stream-wrapper').style.display = 'block';
+} else {
+document.getElementById('auth-container').style.display = 'block';
+document.getElementById('stream-wrapper').style.display = 'none';
+}
+};
+
+let joinAndDisplayLocalStream = async () => {
+client.on('user-published', handleUserJoined)
+client.on('user-left', handleUserLeft)
+
+let UID = await client.join(APP_ID, CHANNEL, TOKEN, null)
+
+localTracks = await AgoraRTC.createMicrophoneAndCameraTracks() 
+
+let player = `<div class="video-container" id="user-container-${UID}">
+                    <div class="video-player" id="user-${UID}"></div>
+              </div>`
+document.getElementById('video-streams').insertAdjacentHTML('beforeend', player)
+
+localTracks[1].play(`user-${UID}`)
+
+await client.publish([localTracks[0], localTracks[1]])
 }
 
-// تسجيل مستخدم جديد
-const registerUser = async (e) => {
-    e.preventDefault()
-    
-    const username = document.getElementById('username').value
-    const email = document.getElementById('email').value
-    const password = document.getElementById('password').value
-    const profilePicInput = document.getElementById('profile-pic')
-    
-    if (!username || !email || !password) {
-        alert('Please fill in all fields')
-        return
-    }
-
-    let profilePicBase64 = 'default-avatar.png'
-    if (profilePicInput.files.length > 0) {
-        try {
-            profilePicBase64 = await convertToBase64(profilePicInput.files[0])
-        } catch (error) {
-            console.error('Error converting image:', error)
-            alert('Error uploading profile picture')
-            return
-        }
-    }
-
-    const userData = {
-        username,
-        email,
-        password: await hashPassword(password),
-        profilePic: profilePicBase64
-    }
-
-    try {
-        localStorage.setItem('userData', JSON.stringify(userData))
-        currentUser = userData
-        checkAuth()
-    } catch (error) {
-        console.error('Error saving user data:', error)
-        alert('Registration failed. Please try again.')
-    }
+let joinStream = async () => {
+await joinAndDisplayLocalStream()
+document.getElementById('join-btn').style.display = 'none'
+document.getElementById('stream-controls').style.display = 'flex'
 }
 
-// تسجيل الدخول
-const loginUser = async (e) => {
-    e.preventDefault()
-    
-    const email = document.getElementById('login-email').value
-    const password = document.getElementById('login-password').value
-    
-    if (!email || !password) {
-        alert('Please fill in all fields')
-        return
+let handleUserJoined = async (user, mediaType) => {
+remoteUsers[user.uid] = user;
+await client.subscribe(user, mediaType);
+
+
+if (mediaType === 'video') {
+    let player = document.getElementById(`user-container-${user.uid}`);
+    if (player != null) {
+        player.remove();
     }
 
-    const userData = localStorage.getItem('userData')
-    if (userData) {
-        const user = JSON.parse(userData)
-        const hashedPassword = await hashPassword(password)
+    let playerContainer = `
+        <div class="video-container" id="user-container-${user.uid}">
+            <div class="video-player" id="user-${user.uid}"></div>
+            <div class="user-info">
+                <img src="${userProfiles[user.uid]?.profilePic || 'default-avatar.png'}" alt="Profile">
+                <span>${userProfiles[user.uid]?.username || 'User'}</span>
+            </div>
+    `;
+
+    // إضافة زر التوسيع إذا كان المستخدم يشارك الشاشة
+    if (user.videoTrack.trackMediaType === 'screen-video') {
+        playerContainer += `
+            <button class="expand-btn" onclick="toggleFullScreen(document.getElementById('user-container-${user.uid}'))">
+                <i class="fas fa-expand"></i>
+            </button>
+        `;
+        screenSharingUid = user.uid;
+        document.getElementById('screen-btn').disabled = true;
+    }
+
+    playerContainer += `</div>`;
+
+    document.getElementById('video-streams').insertAdjacentHTML('beforeend', playerContainer);
+    user.videoTrack.play(`user-${user.uid}`);
+}
+
+if (mediaType === 'audio') {
+    user.audioTrack.play();
+}
+};
+
+let handleUserLeft = async (user) => {
+delete remoteUsers[user.uid]
+document.getElementById(user-container-${user.uid}).remove()
+
+
+Copier
+// Re-enable screen share button if the user who was sharing left
+if(user.uid === screenSharingUid) {
+    screenSharingUid = null
+    document.getElementById('screen-btn').disabled = false
+}
+}
+
+let leaveAndRemoveLocalStream = async () => {
+for(let i = 0; localTracks.length > i; i++){
+localTracks[i].stop()
+localTracks[i].close()
+}
+
+if(screenTrack) {
+    screenTrack.stop()
+    screenTrack.close()
+}
+
+await client.leave()
+document.getElementById('join-btn').style.display = 'block'
+document.getElementById('stream-controls').style.display = 'none'
+document.getElementById('video-streams').innerHTML = ''
+}
+
+let toggleMic = async (e) => {
+if (localTracks[0].muted){
+await localTracks[0].setMuted(false)
+e.target.innerText = 'Mic on'
+e.target.style.backgroundColor = 'cadetblue'
+}else{
+await localTracks[0].setMuted(true)
+e.target.innerText = 'Mic off'
+e.target.style.backgroundColor = '#EE4B2B'
+}
+}
+
+let toggleCamera = async (e) => {
+if(localTracks[1].muted){
+await localTracks[1].setMuted(false)
+e.target.innerText = 'Camera on'
+e.target.style.backgroundColor = 'cadetblue'
+}else{
+await localTracks[1].setMuted(true)
+e.target.innerText = 'Camera off'
+e.target.style.backgroundColor = '#EE4B2B'
+}
+}
+
+let toggleScreenShare = async (e) => {
+if (!isScreenSharing) {
+try {
+// إنشاء track للشاشة مع الصوت
+screenTrack = await AgoraRTC.createScreenVideoTrack({
+encoderConfig: "1080p_1",
+optimizationMode: "detail",
+screenAudioTrack: true,
+}, {
+encoderConfig: {
+sampleRate: 44100,
+stereo: true,
+bitrate: 128
+}
+});
+
+
+        // إذا كان هناك track صوتي منفصل
+        const [videoTrack, audioTrack] = Array.isArray(screenTrack) ? screenTrack : [screenTrack];
+
+        // حفظ الفيديو الحالي في نافذة صغيرة
+        const miniVideoContainer = `
+            <div class="video-container small-video" id="user-mini-${currentUser?.uid || 'local'}">
+                <div class="video-player" id="mini-video"></div>
+                <div class="user-info">
+                    <img src="${currentUser?.profilePic || 'default-avatar.png'}" alt="Profile">
+                    <span>${currentUser?.username || 'You'}</span>
+                </div>
+            </div>
+        `;
+        document.getElementById('video-streams').insertAdjacentHTML('beforeend', miniVideoContainer);
+
+        // إلغاء نشر الكاميرا الحالية
+        await client.unpublish([localTracks[1]]);
         
-        if (user.email === email && user.password === hashedPassword) {
-            currentUser = user
-            checkAuth()
+        // نشر مشاركة الشاشة والصوت
+        if (audioTrack) {
+            await client.publish([videoTrack, audioTrack]);
         } else {
-            alert('Invalid email or password')
+            await client.publish([videoTrack]);
         }
-    } else {
-        alert('User not found')
+
+        // تشغيل الفيديو المصغر
+        localTracks[1].play('mini-video');
+
+        // إضافة زر التوسيع
+        const screenContainer = document.getElementById(`user-container-${currentUser?.uid || 'local'}`);
+        const expandBtn = document.createElement('button');
+        expandBtn.className = 'expand-btn';
+        expandBtn.innerHTML = '<i class="fas fa-expand"></i>';
+        expandBtn.onclick = () => toggleFullScreen(screenContainer);
+        screenContainer.appendChild(expandBtn);
+
+        // تحديث الحالة والزر
+        isScreenSharing = true;
+        e.target.innerHTML = '<i class="fas fa-desktop"></i> Stop Sharing';
+        e.target.style.backgroundColor = '#EE4B2B';
+
+        // إضافة مستمع لإنهاء المشاركة
+        videoTrack.on('track-ended', async () => {
+            await stopScreenSharing(e);
+        });
+
+    } catch (error) {
+        console.error('Error sharing screen:', error);
+        alert('Failed to share screen. Please try again.');
     }
+} else {
+    await stopScreenSharing(e);
 }
+};
+
+async function stopScreenSharing(e) {
+try {
+await client.unpublish(Array.isArray(screenTrack) ? screenTrack : [screenTrack]);
+
+    if (Array.isArray(screenTrack)) {
+        screenTrack.forEach(track => {
+            track.stop();
+            track.close();
+        });
+    } else {
+        screenTrack.stop();
+        screenTrack.close();
+    }
+    
+    screenTrack = null;
+    
+    // إعادة نشر الكاميرا
+    await client.publish([localTracks[1]]);
+    
+    // إزالة الفيديو المصغر
+    const miniVideo = document.getElementById(`user-mini-${currentUser?.uid || 'local'}`);
+    if (miniVideo) miniVideo.remove();
+
+    isScreenSharing = false;
+    e.target.innerHTML = '<i class="fas fa-desktop"></i> Share Screen';
+    e.target.style.backgroundColor = 'cadetblue';
+    
+} catch (error) {
+    console.error('Error stopping screen share:', error);
+}
+}
+
+// دالة التوسيع
+const toggleFullScreen = (element) => {
+if (!document.fullscreenElement) {
+element.requestFullscreen();
+} else {
+document.exitFullscreen();
+}
+};
+
+// تسجيل المستخدم الجديد
+const registerUser = async () => {
+const username = document.getElementById('username').value;
+const email = document.getElementById('email').value;
+const password = document.getElementById('password').value;
+const profilePic = document.getElementById('profile-pic').files[0];
+
+
+// تحويل الصورة إلى Base64
+const base64Image = await convertToBase64(profilePic);
+
+const userData = {
+    username,
+    email,
+    password, // في التطبيق الحقيقي يجب تشفير كلمة المرور
+    profilePic: base64Image
+};
+
+localStorage.setItem('userData', JSON.stringify(userData));
+currentUser = userData;
+checkAuth();
+};
 
 // تحويل الصورة إلى Base64
 const convertToBase64 = (file) => {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader()
-        reader.readAsDataURL(file)
-        reader.onload = () => resolve(reader.result)
-        reader.onerror = (error) => reject(error)
-    })
-}
+return new Promise((resolve, reject) => {
+const reader = new FileReader();
+reader.onload = () => resolve(reader.result);
+reader.onerror = reject;
+reader.readAsDataURL(file);
+});
+};
 
-// تشفير كلمة المرور (استخدام بسيط - في التطبيق الحقيقي يجب استخدام طريقة أكثر أماناً)
-const hashPassword = async (password) => {
-    const encoder = new TextEncoder()
-    const data = encoder.encode(password)
-    const hash = await crypto.subtle.digest('SHA-256', data)
-    return Array.from(new Uint8Array(hash))
-        .map(b => b.toString(16).padStart(2, '0'))
-        .join('')
-}
+document.getElementById('join-btn').addEventListener('click', joinStream)
+document.getElementById('leave-btn').addEventListener('click', leaveAndRemoveLocalStream)
+document.getElementById('mic-btn').addEventListener('click', toggleMic)
+document.getElementById('camera-btn').addEventListener('click', toggleCamera)
+document.getElementById('screen-btn').addEventListener('click', toggleScreenShare)
+document.getElementById('register-btn').addEventListener('click', registerUser);
+document.getElementById('show-login').addEventListener('click', () => {
+document.getElementById('register-form').style.display = 'none';
+document.getElementById('login-form').style.display = 'block';
+});
+document.getElementById('show-register').addEventListener('click', () => {
+document.getElementById('login-form').style.display = 'none';
+document.getElementById('register-form').style.display = 'block';
+});
 
-// انضمام للبث
-const joinStream = async () => {
-    if (!checkAuth()) {
-        alert('Please login first')
-        return
-    }
-    await joinAndDisplayLocalStream()
-    document.getElementById('join-btn').style.display = 'none'
-    document.getElementById('stream-controls').style.display = 'flex'
-}
-
-// إنشاء وعرض البث المحلي
-const joinAndDisplayLocalStream = async () => {
-    try {
-        client.on('user-published', handleUserJoined)
-        client.on('user-left', handleUserLeft)
-        
-        const UID = await client.join(APP_ID, CHANNEL, TOKEN, null)
-        currentUser.uid = UID
-        
-        localTracks = await AgoraRTC.createMicrophoneAndCameraTracks()
-        
-        const player = createVideoPlayer(UID, currentUser.username, currentUser.profilePic)
-        document.getElementById('video-streams').insertAdjacentHTML('beforeend', player)
-        
-        localTracks[1].play(`user-${UID}`)
-        await client.publish(localTracks)
-        
-        userProfiles.set(UID, {
-            username: currentUser.username,
-            profilePic: currentUser.profilePic
-        })
-        
-    } catch (error) {
-        console.error('Error joining stream:', error)
-        alert('Failed to join stream. Please try again.')
-    }
-}
-
-// معالجة انضمام المستخدمين
-const handleUserJoined = async (user, mediaType) => {
-    remoteUsers[user.uid] = user
-    await client.subscribe(user, mediaType)
-
-    if (mediaType === 'video') {
-        let playerContainer = document.getElementById(`user-container-${user.uid}`)
-        if (playerContainer) playerContainer.remove()
-
-        const userProfile = userProfiles.get(user.uid) || { 
-            username: 'User', 
-            profilePic: 'default-avatar.png'
-        }
-        
-        const player = createVideoPlayer(user.uid, userProfile.username, userProfile.profilePic)
-        document.getElementById('video-streams').insertAdjacentHTML('beforeend', player)
-
-        if (user.videoTrack.trackMediaType === 'screen-video') {
-            addExpandButton(`user-container-${user.uid}`)
-            screenSharingUid = user.uid
-            document.getElementById('screen-btn').disabled = true
-        }
-
-        user.videoTrack.play(`user-${user.uid}`)
-    }
-
-    if (mediaType === 'audio') {
-        user.audioTrack.play()
-    }
-}
-
-// معالجة مغادرة المستخدمين
-const handleUserLeft = async (user) => {
-    delete remoteUsers[user.uid]
-    const playerContainer = document.getElementById(`user-container-${user.uid}`)
-    if (playerContainer) playerContainer.remove()
-    
-    if (user.uid === screenSharingUid) {
-        screenSharingUid = null
-        document.getElementById('screen-btn').disabled = false
-    }
-}
-
-// مغادرة البث
-const leaveAndRemoveLocalStream = async () => {
-    try {
-        for (let track of localTracks) {
-            track.stop()
-            track.close()
-        }
-        
-        if (screenTrack) {
-            screenTrack.stop()
-            screenTrack.close()
-        }
-
-        await client.leave()
-        document.getElementById('join-btn').style.display = 'block'
-        document.getElementById('stream-controls').style.display = 'none'
-        document.getElementById('video-streams').innerHTML = ''
-        
-    } catch (error) {
-        console.error('Error leaving stream:', error)
-    }
-}
-
-// التحكم بالميكروفون
-const toggleMic = async (e) => {
-    if (localTracks[0].muted) {
-        await localTracks[0].setMuted(false)
-        e.target.innerHTML = '<i class="fas fa-microphone"></i> Mic on'
-        e.target.style.backgroundColor = 'cadetblue'
-    } else {
-        await localTracks[0].setMuted(true)
-        e.target.innerHTML = '<i class="fas fa-microphone-slash"></i> Mic off'
-        e.target.style.backgroundColor = '#EE4B2B'
-    }
-}
-
-// التحكم بالكاميرا
-const toggleCamera = async (e) => {
-    if (localTracks[1].muted) {
-        await localTracks[1].setMuted(false)
-        e.target.innerHTML = '<i class="fas fa-video"></i> Camera on'
-        e.target.style.backgroundColor = 'cadetblue'
-    } else {
-        await localTracks[1].setMuted(true)
-        e.target.innerHTML = '<i class="fas fa-video-slash"></i> Camera off'
-        e.target.style.backgroundColor = '#EE4B2B'
-    }
-}
-
-// مشاركة الشاشة
-const toggleScreenShare = async (e) => {
-    if (!isScreenSharing) {
-        try {
-            screenTrack = await AgoraRTC.createScreenVideoTrack({
-                encoderConfig: "1080p_2",
-                optimizationMode: "detail",
-            })
-
-            const miniPlayer = createMiniVideoPlayer()
-            document.getElementById('video-streams').insertAdjacentHTML('beforeend', miniPlayer)
-            localTracks[1].play('mini-video')
-
-            await client.unpublish(localTracks[1])
-            await client.publish(screenTrack)
-
-            const screenContainer = document.getElementById(`user-container-${currentUser.uid}`)
-            addExpandButton(screenContainer.id)
-
-            screenTrack.on('track-ended', () => stopScreenSharing(e))
-            
-            isScreenSharing = true
-            updateScreenShareButton(e, true)
-
-        } catch (error) {
-            console.error('Screen sharing error:', error)
-            alert('Failed to share screen. Please try again.')
-        }
-    } else {
-        await stopScreenSharing(e)
-    }
-}
-
-// إيقاف مشاركة الشاشة
-const stopScreenSharing = async (e) => {
-    try {
-        await client.unpublish(screenTrack)
-        screenTrack.stop()
-        screenTrack.close()
-        screenTrack = null
-        
-        await client.publish([localTracks[1]])
-        
-        const miniVideo = document.getElementById('mini-video-container')
-        if (miniVideo) miniVideo.remove()
-        
-        isScreenSharing = false
-        updateScreenShareButton(e, false)
-        
-    } catch (error) {
-        console.error('Error stopping screen share:', error)
-    }
-}
-
-// وظائف مساعدة
-const createVideoPlayer = (uid, username, profilePic) => {
-    return `
-        <div class="video-container" id="user-container-${uid}">
-            <div class="video-player" id="user-${uid}"></div>
-            <div class="user-info">
-                <img src="${profilePic}" alt="${username}">
-                <span>${username}</span>
-            </div>
-        </div>
-    `
-}
-
-const createMiniVideoPlayer = () => {
-    return `
-        <div class="video-container small-video" id="mini-video-container">
-            <div class="video-player" id="mini-video"></div>
-            <div class="user-info">
-                <img src="${currentUser.profilePic}" alt="${currentUser.username}">
-                <span>${currentUser.username}</span>
-            </div>
-        </div>
-    `
-}
-
-const addExpandButton = (containerId) => {
-    const container = document.getElementById(containerId)
-    const expandBtn = document.createElement('button')
-    expandBtn.className = 'expand-btn'
-    expandBtn.innerHTML = '<i class="fas fa-expand"></i>'
-    expandBtn.onclick = () => toggleFullScreen(container)
-    container.appendChild(expandBtn)
-}
-
-const updateScreenShareButton = (button, isSharing) => {
-    button.innerHTML = isSharing ? 
-        '<i class="fas fa-desktop"></i> Stop Sharing' :
-        '<i class="fas fa-desktop"></i> Share Screen'
-    button.style.backgroundColor = isSharing ? '#EE4B2B' : 'cadetblue'
-}
-
-const toggleFullScreen = (element) => {
-    if (!document.fullscreenElement) {
-        element.requestFullscreen()
-            .catch(err => console.error('Fullscreen error:', err))
-    } else {
-        document.exitFullscreen()
-    }
-}
-
-// تبديل بين نماذج التسجيل وتسجيل الدخول
-const toggleForms = (showLogin) => {
-    document.getElementById('register-form').style.display = showLogin ? 'none' : 'block'
-    document.getElementById('login-form').style.display = showLogin ? 'block' : 'none'
-}
-
-// إضافة المستمعين للأحداث
-document.addEventListener('DOMContentLoaded', () => {
-    document.getElementById('join-btn').addEventListener('click', joinStream)
-    document.getElementById('leave-btn').addEventListener('click', leaveAndRemoveLocalStream)
-    document.getElementById('mic-btn').addEventListener('click', toggleMic)
-    document.getElementById('camera-btn').addEventListener('click', toggleCamera)
-    document.getElementById('screen-btn').addEventListener('click', toggleScreenShare)
-    document.getElementById('register-btn').addEventListener('click', registerUser)
-    document.getElementById('login-btn').addEventListener('click', loginUser)
-    document.getElementById('show-login').addEventListener('click', () => toggleForms(true))
-    document.getElementById('show-register').addEventListener('click', () => toggleForms(false))
-    
-    checkAuth()
-})
+// تحقق من حالة المصادقة عند تحميل الصفحة
+window.addEventListener('load', checkAuth); <!DOCTYPE html>
