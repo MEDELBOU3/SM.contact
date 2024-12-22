@@ -12,7 +12,7 @@ let screenSharingUid = null
 let currentUser = null
 const userProfiles = new Map()
 
-// تحسين التحقق من المصادقة
+// التحقق من المصادقة
 const checkAuth = () => {
     const userData = localStorage.getItem('userData')
     if (userData) {
@@ -26,7 +26,108 @@ const checkAuth = () => {
     return false
 }
 
-// تحسين إنشاء وعرض الفيديو المحلي
+// تسجيل مستخدم جديد
+const registerUser = async (e) => {
+    e.preventDefault()
+    
+    const username = document.getElementById('username').value
+    const email = document.getElementById('email').value
+    const password = document.getElementById('password').value
+    const profilePicInput = document.getElementById('profile-pic')
+    
+    if (!username || !email || !password) {
+        alert('Please fill in all fields')
+        return
+    }
+
+    let profilePicBase64 = 'default-avatar.png'
+    if (profilePicInput.files.length > 0) {
+        try {
+            profilePicBase64 = await convertToBase64(profilePicInput.files[0])
+        } catch (error) {
+            console.error('Error converting image:', error)
+            alert('Error uploading profile picture')
+            return
+        }
+    }
+
+    const userData = {
+        username,
+        email,
+        password: await hashPassword(password),
+        profilePic: profilePicBase64
+    }
+
+    try {
+        localStorage.setItem('userData', JSON.stringify(userData))
+        currentUser = userData
+        checkAuth()
+    } catch (error) {
+        console.error('Error saving user data:', error)
+        alert('Registration failed. Please try again.')
+    }
+}
+
+// تسجيل الدخول
+const loginUser = async (e) => {
+    e.preventDefault()
+    
+    const email = document.getElementById('login-email').value
+    const password = document.getElementById('login-password').value
+    
+    if (!email || !password) {
+        alert('Please fill in all fields')
+        return
+    }
+
+    const userData = localStorage.getItem('userData')
+    if (userData) {
+        const user = JSON.parse(userData)
+        const hashedPassword = await hashPassword(password)
+        
+        if (user.email === email && user.password === hashedPassword) {
+            currentUser = user
+            checkAuth()
+        } else {
+            alert('Invalid email or password')
+        }
+    } else {
+        alert('User not found')
+    }
+}
+
+// تحويل الصورة إلى Base64
+const convertToBase64 = (file) => {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.readAsDataURL(file)
+        reader.onload = () => resolve(reader.result)
+        reader.onerror = (error) => reject(error)
+    })
+}
+
+// تشفير كلمة المرور (استخدام بسيط - في التطبيق الحقيقي يجب استخدام طريقة أكثر أماناً)
+const hashPassword = async (password) => {
+    const encoder = new TextEncoder()
+    const data = encoder.encode(password)
+    const hash = await crypto.subtle.digest('SHA-256', data)
+    return Array.from(new Uint8Array(hash))
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('')
+}
+
+// انضمام للبث
+const joinStream = async () => {
+    if (!checkAuth()) {
+        alert('Please login first')
+        return
+    }
+    await joinAndDisplayLocalStream()
+    document.getElementById('join-btn').style.display = 'none'
+    document.getElementById('stream-controls').style.display = 'flex'
+}
+
+// إنشاء وعرض البث المحلي
 const joinAndDisplayLocalStream = async () => {
     try {
         client.on('user-published', handleUserJoined)
@@ -43,7 +144,6 @@ const joinAndDisplayLocalStream = async () => {
         localTracks[1].play(`user-${UID}`)
         await client.publish(localTracks)
         
-        // تحديث معلومات المستخدم للآخرين
         userProfiles.set(UID, {
             username: currentUser.username,
             profilePic: currentUser.profilePic
@@ -55,7 +155,7 @@ const joinAndDisplayLocalStream = async () => {
     }
 }
 
-// تحسين معالجة انضمام المستخدمين
+// معالجة انضمام المستخدمين
 const handleUserJoined = async (user, mediaType) => {
     remoteUsers[user.uid] = user
     await client.subscribe(user, mediaType)
@@ -86,7 +186,68 @@ const handleUserJoined = async (user, mediaType) => {
     }
 }
 
-// تحسين مشاركة الشاشة
+// معالجة مغادرة المستخدمين
+const handleUserLeft = async (user) => {
+    delete remoteUsers[user.uid]
+    const playerContainer = document.getElementById(`user-container-${user.uid}`)
+    if (playerContainer) playerContainer.remove()
+    
+    if (user.uid === screenSharingUid) {
+        screenSharingUid = null
+        document.getElementById('screen-btn').disabled = false
+    }
+}
+
+// مغادرة البث
+const leaveAndRemoveLocalStream = async () => {
+    try {
+        for (let track of localTracks) {
+            track.stop()
+            track.close()
+        }
+        
+        if (screenTrack) {
+            screenTrack.stop()
+            screenTrack.close()
+        }
+
+        await client.leave()
+        document.getElementById('join-btn').style.display = 'block'
+        document.getElementById('stream-controls').style.display = 'none'
+        document.getElementById('video-streams').innerHTML = ''
+        
+    } catch (error) {
+        console.error('Error leaving stream:', error)
+    }
+}
+
+// التحكم بالميكروفون
+const toggleMic = async (e) => {
+    if (localTracks[0].muted) {
+        await localTracks[0].setMuted(false)
+        e.target.innerHTML = '<i class="fas fa-microphone"></i> Mic on'
+        e.target.style.backgroundColor = 'cadetblue'
+    } else {
+        await localTracks[0].setMuted(true)
+        e.target.innerHTML = '<i class="fas fa-microphone-slash"></i> Mic off'
+        e.target.style.backgroundColor = '#EE4B2B'
+    }
+}
+
+// التحكم بالكاميرا
+const toggleCamera = async (e) => {
+    if (localTracks[1].muted) {
+        await localTracks[1].setMuted(false)
+        e.target.innerHTML = '<i class="fas fa-video"></i> Camera on'
+        e.target.style.backgroundColor = 'cadetblue'
+    } else {
+        await localTracks[1].setMuted(true)
+        e.target.innerHTML = '<i class="fas fa-video-slash"></i> Camera off'
+        e.target.style.backgroundColor = '#EE4B2B'
+    }
+}
+
+// مشاركة الشاشة
 const toggleScreenShare = async (e) => {
     if (!isScreenSharing) {
         try {
@@ -95,7 +256,6 @@ const toggleScreenShare = async (e) => {
                 optimizationMode: "detail",
             })
 
-            // حفظ الفيديو الحالي كنافذة صغيرة
             const miniPlayer = createMiniVideoPlayer()
             document.getElementById('video-streams').insertAdjacentHTML('beforeend', miniPlayer)
             localTracks[1].play('mini-video')
@@ -117,6 +277,27 @@ const toggleScreenShare = async (e) => {
         }
     } else {
         await stopScreenSharing(e)
+    }
+}
+
+// إيقاف مشاركة الشاشة
+const stopScreenSharing = async (e) => {
+    try {
+        await client.unpublish(screenTrack)
+        screenTrack.stop()
+        screenTrack.close()
+        screenTrack = null
+        
+        await client.publish([localTracks[1]])
+        
+        const miniVideo = document.getElementById('mini-video-container')
+        if (miniVideo) miniVideo.remove()
+        
+        isScreenSharing = false
+        updateScreenShareButton(e, false)
+        
+    } catch (error) {
+        console.error('Error stopping screen share:', error)
     }
 }
 
@@ -170,25 +351,10 @@ const toggleFullScreen = (element) => {
     }
 }
 
-// تحسين إيقاف مشاركة الشاشة
-const stopScreenSharing = async (e) => {
-    try {
-        await client.unpublish(screenTrack)
-        screenTrack.stop()
-        screenTrack.close()
-        screenTrack = null
-        
-        await client.publish([localTracks[1]])
-        
-        const miniVideo = document.getElementById('mini-video-container')
-        if (miniVideo) miniVideo.remove()
-        
-        isScreenSharing = false
-        updateScreenShareButton(e, false)
-        
-    } catch (error) {
-        console.error('Error stopping screen share:', error)
-    }
+// تبديل بين نماذج التسجيل وتسجيل الدخول
+const toggleForms = (showLogin) => {
+    document.getElementById('register-form').style.display = showLogin ? 'none' : 'block'
+    document.getElementById('login-form').style.display = showLogin ? 'block' : 'none'
 }
 
 // إضافة المستمعين للأحداث
@@ -199,6 +365,9 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('camera-btn').addEventListener('click', toggleCamera)
     document.getElementById('screen-btn').addEventListener('click', toggleScreenShare)
     document.getElementById('register-btn').addEventListener('click', registerUser)
+    document.getElementById('login-btn').addEventListener('click', loginUser)
+    document.getElementById('show-login').addEventListener('click', () => toggleForms(true))
+    document.getElementById('show-register').addEventListener('click', () => toggleForms(false))
     
     checkAuth()
-}) 
+})
