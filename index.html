@@ -5,88 +5,240 @@
     <meta http-equiv='X-UA-Compatible' content='IE=edge'>
     <title>SM.contact</title>
     <meta name='viewport' content='width=device-width, initial-scale=1'>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
-       body{
-            background:#0F2027;
-            background:-webkit-linear-gradient(to right, #2C5364, #203A43, #0F2027) ;
-            background: linear-gradient(to right, #2C5364, #203A43, #0F2027);
+      * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Poppins', sans-serif;
         }
-        
-        #join-btn{
-            position: fixed;
-            top:50%;
-            left:50%;
-            margin-top:-50px;
-            margin-left:-100px;
-            font-size:18px;
-            padding:20px 40px;
+
+        body {
+            background: #0F2027;
+            background: linear-gradient(135deg, #2C5364, #203A43, #0F2027);
+            min-height: 100vh;
+            color: #fff;
         }
-        
-        #video-streams{
-            display:grid;
-            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
-            height: 90vh;
-            width: 1400px;
-            margin:0 auto;
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
         }
-        
-        .video-container{
-            max-height: 100%;
-            border: 2px solid black;
-            background-color: #203A49;
+
+        .header {
+            text-align: center;
+            padding: 20px 0;
         }
-        
-        .video-player{
-            height: 100%;
-            width: 100%;
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
         }
-        
-        button{
-            border:none;
-            background-color: cadetblue;
-            color:#fff;
-            padding:10px 20px;
-            font-size:16px;
-            margin:2px;
+
+        .join-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 80vh;
+        }
+
+        #join-btn {
+            font-size: 1.2em;
+            padding: 15px 40px;
+            border-radius: 30px;
+            background: linear-gradient(135deg, #00b4db, #0083b0);
+            border: none;
+            color: white;
             cursor: pointer;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
         }
-        
-        button:disabled {
+
+        #join-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        #video-streams {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .video-container {
+            position: relative;
+            border-radius: 10px;
+            overflow: hidden;
+            background-color: #203A49;
+            aspect-ratio: 16/9;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        .video-player {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .user-name {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 0.9em;
+        }
+
+        #stream-controls {
+            display: none;
+            justify-content: center;
+            gap: 10px;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            margin-top: 20px;
+        }
+
+        .control-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            border: none;
+            background-color: rgba(255, 255, 255, 0.2);
+            color: white;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .control-btn:hover {
+            background-color: rgba(255, 255, 255, 0.3);
+        }
+
+        .control-btn.active {
+            background-color: #EE4B2B;
+        }
+
+        .control-btn:disabled {
             background-color: #888;
             cursor: not-allowed;
         }
-        
-        #stream-controls{
+
+        #leave-btn {
+            background-color: #EE4B2B;
+        }
+
+        .participant-count {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 5px 10px;
+            border-radius: 5px;
+        }
+
+        @media screen and (max-width: 768px) {
+            .container {
+                padding: 10px;
+            }
+
+            #video-streams {
+                grid-template-columns: 1fr;
+            }
+
+            .header h1 {
+                font-size: 1.8em;
+            }
+
+            #stream-controls {
+                flex-wrap: wrap;
+            }
+        }
+
+        .status-indicator {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background-color: #4CAF50;
+        }
+
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
             display: none;
             justify-content: center;
-            margin-top:0.5em;
+            align-items: center;
+            z-index: 1000;
         }
-        
-        @media screen and (max-width:1400px){
-            #video-streams{
-                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-                width: 95%;
-            }
+
+        .loader {
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #3498db;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
     </style>
 </head>
 <body>
+ <div class="container">
+        <div class="header">
+            <h1>Ivy Streams</h1>
+            <p>High-quality video conferencing</p>
+        </div>
 
- <button id="join-btn">Join Stream</button>
+        <div class="join-container">
+            <button id="join-btn">Join Stream</button>
+        </div>
 
-    <div id="stream-wrapper">
-        <div id="video-streams"></div>
+        <div id="stream-wrapper">
+            <div class="participant-count">Participants: <span id="participant-number">0</span></div>
+            <div id="video-streams"></div>
 
-        <div id="stream-controls">
-            <button id="leave-btn">Leave Stream</button>
-            <button id="mic-btn">Mic On</button>
-            <button id="camera-btn">Camera on</button>
-            <button id="screen-btn">Share Screen</button>
+            <div id="stream-controls">
+                <button class="control-btn" id="mic-btn" title="Toggle Microphone">
+                    <i class="fas fa-microphone"></i>
+                </button>
+                <button class="control-btn" id="camera-btn" title="Toggle Camera">
+                    <i class="fas fa-video"></i>
+                </button>
+                <button class="control-btn" id="screen-btn" title="Share Screen">
+                    <i class="fas fa-desktop"></i>
+                </button>
+                <button class="control-btn" id="leave-btn" title="Leave Stream">
+                    <i class="fas fa-phone-slash"></i>
+                </button>
+            </div>
         </div>
     </div>
-    
-</body>
+
+    <div class="loading-overlay">
+        <div class="loader"></div>
+    </div>
+ <script src="https://kit.fontawesome.com/your-font-awesome-kit.js"></script>
 <!-- <script src="https://download.agora.io/sdk/release/AgoraRTC_N.js"></script> -->
 <script src="AgoraRTC_N-4.7.3.js"></script>
 <script src='main.js'></script>
+ </body>
 </html>
