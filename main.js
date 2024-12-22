@@ -94,7 +94,7 @@ if (mediaType === 'audio') {
 
 let handleUserLeft = async (user) => {
 delete remoteUsers[user.uid]
-document.getElementById(user-container-${user.uid}).remove()
+document.getElementById(user-container-`${user.uid}`).remove()
 
 
 Copier
@@ -308,4 +308,4 @@ document.getElementById('register-form').style.display = 'block';
 });
 
 // تحقق من حالة المصادقة عند تحميل الصفحة
-window.addEventListener('load', checkAuth); <!DOCTYPE html>
+window.addEventListener('load', checkAuth); 
