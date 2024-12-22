@@ -21,6 +21,30 @@
             min-height: 100vh;
             color: #fff;
         }
+        #join-btn {
+            font-size: 1.2em;
+            padding: 15px 40px;
+            border-radius: 30px;
+            background: linear-gradient(135deg, #00b4db, #0083b0);
+            border: none;
+            color: white;
+            cursor: pointer;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        #join-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        #video-streams {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+     
       #stream-wrapper {
             display: none;
             flex-direction: column;
@@ -29,25 +53,6 @@
             background: rgba(0, 0, 0, 0.05);
             border-radius: 8px;
             margin-top: 1rem;
-        }
-        
-        #video-streams {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 1rem;
-            margin-bottom: 1rem;
-        }
-        
-        .video-container {
-            background-color: black;
-            border-radius: 8px;
-            overflow: hidden;
-            aspect-ratio: 16/9;
-        }
-        
-        .video-player {
-            width: 100%;
-            height: 100%;
         }
         
         #stream-controls {
@@ -76,20 +81,7 @@
             cursor: not-allowed;
         }
         
-        #join-btn {
-            padding: 0.5rem 1rem;
-            background-color: #4CAF50;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            margin-top: 1rem;
-            transition: background-color 0.3s ease;
-        }
         
-        #join-btn:hover {
-            background-color: #45a049;
-        }
     </style>
 </head>
 <body>
