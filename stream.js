@@ -3,6 +3,7 @@ const TOKEN = "007eJxTYDj0f46owrbknFkP9pfNd+O72af/3bcr2DbV8N3ujp9CW54pMJimmScaG1
 const CHANNEL = "sm4music"
 
 const client = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
+
 let localTracks = {
     audioTrack: null,
     videoTrack: null
@@ -11,209 +12,178 @@ let remoteUsers = {};
 let isAudioEnabled = true;
 let isVideoEnabled = true;
 let isScreenSharing = false;
-let screenTrack = null;
 
-// Initialize stats variables
+// DOM elements
+const modal = document.getElementById('join-modal');
+const joinBtn = document.getElementById('join-btn');
+const usernameInput = document.getElementById('username');
+const participantsCount = document.getElementById('participants-count');
+const streamTime = document.getElementById('stream-time');
 let streamStartTime;
-let statsInterval;
 
-async function joinAndDisplayLocalStream() {
+// Show join modal on load
+modal.classList.add('active');
+
+joinBtn.onclick = async () => {
+    if (usernameInput.value.trim() === '') {
+        alert('Please enter a username');
+        return;
+    }
+    modal.classList.remove('active');
+    await joinStream();
+};
+
+async function joinStream() {
     try {
         // Join the channel
-        await client.join(APP_ID, CHANNEL, TOKEN || null);
+        await client.join(APP_ID, CHANNEL, TOKEN, null);
         
         // Create local tracks
         localTracks.audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
-        localTracks.videoTrack = await AgoraRTC.createCameraVideoTrack({
-            encoderConfig: {
-                width: { min: 640, ideal: 1920, max: 1920 },
-                height: { min: 480, ideal: 1080, max: 1080 }
-            }
-        });
-
-        // Play local video track
-        localTracks.videoTrack.play('local-player');
-
+        localTracks.videoTrack = await AgoraRTC.createCameraVideoTrack();
+        
+        // Play local video
+        localTracks.videoTrack.play('local-stream');
+        
         // Publish local tracks
         await client.publish(Object.values(localTracks));
         
         // Start stream timer
         streamStartTime = new Date();
-        updateStreamStats();
+        updateStreamTime();
         
-        console.log("Successfully joined channel and published local tracks");
+        updateParticipantsCount();
+        console.log('Successfully joined the channel');
     } catch (error) {
-        console.error("Error joining channel:", error);
-        showError("Failed to join channel. Please try again.");
+        console.error('Error joining stream:', error);
     }
 }
 
-// Handle remote user events
+// Handle remote users
 client.on('user-published', async (user, mediaType) => {
     await client.subscribe(user, mediaType);
-
+    
     if (mediaType === 'video') {
         remoteUsers[user.uid] = user;
-        const playerContainer = createRemotePlayerContainer(user.uid);
+        const playerContainer = createRemotePlayer(user.uid);
         user.videoTrack.play(playerContainer);
-        updateViewerCount();
+        updateParticipantsCount();
     }
-
+    
     if (mediaType === 'audio') {
         user.audioTrack.play();
     }
 });
 
-client.on('user-unpublished', (user, mediaType) => {
-    if (mediaType === 'video') {
-        removeRemotePlayerContainer(user.uid);
-        delete remoteUsers[user.uid];
-        updateViewerCount();
+client.on('user-unpublished', (user) => {
+    const playerContainer = document.getElementById(`player-${user.uid}`);
+    if (playerContainer) {
+        playerContainer.remove();
     }
+    delete remoteUsers[user.uid];
+    updateParticipantsCount();
 });
 
-// UI Control Functions
+// Control buttons
 document.getElementById('mic-btn').onclick = async () => {
     if (isAudioEnabled) {
         await localTracks.audioTrack.setEnabled(false);
-        isAudioEnabled = false;
         document.getElementById('mic-btn').classList.remove('active');
     } else {
         await localTracks.audioTrack.setEnabled(true);
-        isAudioEnabled = true;
         document.getElementById('mic-btn').classList.add('active');
     }
+    isAudioEnabled = !isAudioEnabled;
 };
 
 document.getElementById('camera-btn').onclick = async () => {
     if (isVideoEnabled) {
         await localTracks.videoTrack.setEnabled(false);
-        isVideoEnabled = false;
         document.getElementById('camera-btn').classList.remove('active');
     } else {
         await localTracks.videoTrack.setEnabled(true);
-        isVideoEnabled = true;
         document.getElementById('camera-btn').classList.add('active');
     }
+    isVideoEnabled = !isVideoEnabled;
 };
 
-document.getElementById('screen-btn').onclick = async () => {
+document.getElementById('screen-share-btn').onclick = async () => {
     if (!isScreenSharing) {
         try {
-            screenTrack = await AgoraRTC.createScreenVideoTrack();
+            const screenTrack = await AgoraRTC.createScreenVideoTrack();
             await client.unpublish(localTracks.videoTrack);
             await client.publish(screenTrack);
+            localTracks.videoTrack = screenTrack;
+            document.getElementById('screen-share-btn').classList.add('active');
             isScreenSharing = true;
-            document.getElementById('screen-btn').classList.add('active');
             
+            // Handle screen share stop
             screenTrack.on('track-ended', async () => {
                 await stopScreenSharing();
             });
         } catch (error) {
-            console.error("Error sharing screen:", error);
-            showError("Failed to start screen sharing");
+            console.error('Error sharing screen:', error);
         }
     } else {
         await stopScreenSharing();
     }
 };
 
-async function stopScreenSharing() {
-    try {
-        await client.unpublish(screenTrack);
-        screenTrack.close();
-        await client.publish(localTracks.videoTrack);
-        isScreenSharing = false;
-        document.getElementById('screen-btn').classList.remove('active');
-    } catch (error) {
-        console.error("Error stopping screen share:", error);
-    }
-}
-
 document.getElementById('leave-btn').onclick = async () => {
-    try {
-        // Stop all local tracks
-        for (let track of Object.values(localTracks)) {
-            track.stop();
-            track.close();
-        }
-        
-        // Leave the channel
-        await client.leave();
-        
-        // Clear remote users and containers
-        remoteUsers = {};
-        document.getElementById('remote-playerlist').innerHTML = '';
-        
-        // Stop stats interval
-        clearInterval(statsInterval);
-        
-        // Redirect or show exit message
-        Swal.fire({
-            title: 'Stream Ended',
-            text: 'You have successfully left the stream.',
-            icon: 'success',
-            confirmButtonText: 'OK'
-        }).then(() => {
-            window.location.reload();
-        });
-    } catch (error) {
-        console.error("Error leaving channel:", error);
-    }
+    // Close local tracks
+    Object.values(localTracks).forEach(track => track.close());
+    
+    // Leave the channel
+    await client.leave();
+    
+    // Clear remote users
+    document.getElementById('remote-streams').innerHTML = '';
+    remoteUsers = {};
+    
+    // Show join modal
+    modal.classList.add('active');
 };
 
-// Utility Functions
-function createRemotePlayerContainer(uid) {
+// Utility functions
+function createRemotePlayer(uid) {
     const container = document.createElement('div');
     container.id = `player-${uid}`;
-    container.className = 'participant-video';
-    document.getElementById('remote-playerlist').append(container);
+    container.className = 'video-player';
+    
+    const controls = document.createElement('div');
+    controls.className = 'player-controls';
+    controls.innerHTML = `<span class="user-name">User ${uid}</span>`;
+    
+    container.appendChild(controls);
+    document.getElementById('remote-streams').appendChild(container);
     return container;
 }
 
-function removeRemotePlayerContainer(uid) {
-    const container = document.getElementById(`player-${uid}`);
-    if (container) container.remove();
+async function stopScreenSharing() {
+    try {
+        await client.unpublish(localTracks.videoTrack);
+        localTracks.videoTrack = await AgoraRTC.createCameraVideoTrack();
+        await client.publish(localTracks.videoTrack);
+        localTracks.videoTrack.play('local-stream');
+        document.getElementById('screen-share-btn').classList.remove('active');
+        isScreenSharing = false;
+    } catch (error) {
+        console.error('Error stopping screen share:', error);
+    }
 }
 
-function updateViewerCount() {
-    const count = Object.keys(remoteUsers).length;
-    document.getElementById('viewer-count').innerText = count;
+function updateParticipantsCount() {
+    const count = Object.keys(remoteUsers).length + 1;
+    participantsCount.textContent = `${count} Participant${count !== 1 ? 's' : ''}`;
 }
 
-function updateStreamStats() {
-    statsInterval = setInterval(() => {
-        // Update stream duration
+function updateStreamTime() {
+    setInterval(() => {
         const duration = Math.floor((new Date() - streamStartTime) / 1000);
         const hours = Math.floor(duration / 3600);
         const minutes = Math.floor((duration % 3600) / 60);
         const seconds = duration % 60;
-        document.getElementById('stream-duration').innerText = 
+        streamTime.textContent = 
             `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-
-        // Get and update stream quality
-        client.getLocalVideoStats().then(stats => {
-            document.getElementById('bitrate').innerText = `${Math.round(stats.sendBitrate)} Kbps`;
-            updateStreamQuality(stats.sendBitrate);
-        });
     }, 1000);
 }
-
-function updateStreamQuality(bitrate) {
-    let quality = 'Poor';
-    if (bitrate > 1000) quality = 'Good';
-    if (bitrate > 2000) quality = 'Excellent';
-    document.getElementById('stream-quality').innerText = quality;
-}
-
-function showError(message) {
-    Swal.fire({
-        title: 'Error',
-        text: message,
-        icon: 'error',
-        confirmButtonText: 'OK'
-    });
-}
-
-// Initialize the application
-joinAndDisplayLocalStream();
