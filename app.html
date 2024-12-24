@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced Streaming Platform v2.0</title>
+    <!-- External Dependencies -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.7.3.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        /* Base Styles */
+        :root {
+            --primary-color: #00ff88;
+            --secondary-color: #2a2a2a;
+            --background-color: #1a1a1a;
+            --text-color: #ffffff;
+            --danger-color: #ff4444;
+            --warning-color: #ffbb33;
+            --success-color: #00c851;
+            --info-color: #33b5e5;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Arial', sans-serif;
+        }
+
+        body {
+            background: var(--background-color);
+            color: var(--text-color);
+            height: 100vh;
+            overflow: hidden;
+            line-height: 1.6;
+        }
+
+        /* Layout Structure */
+        .app-container {
+            display: grid;
+            grid-template-columns: 1fr 350px;
+            height: 100vh;
+            position: relative;
+        }
+
+        /* Header Styles */
+        .main-header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 350px;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(10px);
+            z-index: 100;
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .logo {
+            font-size: 24px;
+            font-weight: bold;
+            color: var(--primary-color);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .live-indicator {
+            background: var(--danger-color);
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+            animation: pulse 2s infinite;
+        }
+
+        /* Stream Container */
+        .stream-container {
+            margin-top: 70px;
+            padding: 20px;
+            display: grid;
+            grid-template-rows: auto 1fr;
+            gap: 20px;
+            height: calc(100vh - 70px);
+        }
+
+        .video-grid {
+            display: grid;
+            grid-template-columns: 3fr 1fr;
+            gap: 20px;
+            height: 100%;
+        }
+
+        .main-video-container {
+            position: relative;
+            background: var(--secondary-color);
+            border-radius: 15px;
+            overflow: hidden;
+        }
+
+        .main-video-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(0deg, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0) 50%);
+            pointer-events: none;
+        }
+
+        /* Participants Grid */
+        .participants-grid {
+            display: grid;
+            grid-template-rows: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 15px;
+            overflow-y: auto;
+            padding-right: 10px;
+        }
+
+        .participant-video {
+            position: relative;
+            background: var(--secondary-color);
+            border-radius: 10px;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .participant-video:hover {
+            transform: scale(1.02);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+
+        /* Controls Panel */
+        .controls-panel {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 15px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px 30px;
+            border-radius: 50px;
+            backdrop-filter: blur(10px);
+            z-index: 1000;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.3);
+        }
+
+        .control-btn {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            border: none;
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--text-color);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2em;
+        }
+
+        .control-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: scale(1.1);
+        }
+
+        .control-btn.active {
+            background: var(--primary-color);
+            color: var(--background-color);
+        }
+
+        .control-btn.danger {
+            background: var(--danger-color);
+        }
+
+        .control-btn.danger:hover {
+            background: #ff6666;
+        }
+
+        /* Stream Statistics */
+        .stream-stats {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px 20px;
+            border-radius: 10px;
+            backdrop-filter: blur(5px);
+            display: flex;
+            gap: 20px;
+        }
+
+        .stat-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+        }
+
+        .stat-item i {
+            color: var(--primary-color);
+        }
+
+        /* Animations */
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        /* Scrollbar Styles */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--primary-color);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #00cc6a;
+        }
+
+        /* Media Queries */
+        @media (max-width: 1200px) {
+            .app-container {
+                grid-template-columns: 1fr 300px;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .app-container {
+                grid-template-columns: 1fr;
+            }
+
+            .video-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .main-header {
+                right: 0;
+            }
+
+            .stream-stats {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Main Header -->
+        <header class="main-header">
+            <div class="brand">
+                <div class="logo">StreamHub Pro</div>
+                <div class="live-indicator">LIVE</div>
+            </div>
+            <div class="stream-info">
+                <div class="stream-stats">
+                    <div class="stat-item">
+                        <i class="fas fa-users"></i>
+                        <span id="viewer-count">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <i class="fas fa-clock"></i>
+                        <span id="stream-duration">00:00:00</span>
+                    </div>
+                    <div class="stat-item">
+                        <i class="fas fa-signal"></i>
+                        <span id="stream-quality">Excellent</span>
+                    </div>
+                    <div class="stat-item">
+                        <i class="fas fa-tachometer-alt"></i>
+                        <span id="bitrate">0 Kbps</span>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content Area -->
+        <main class="stream-container">
+            <div class="video-grid">
+                <div class="main-video-container" id="local-player">
+                    <div class="main-video-overlay"></div>
+                    <div class="stream-quality-indicator">1080p | 30fps</div>
+                </div>
+                <div class="participants-grid" id="remote-playerlist"></div>
+            </div>
+
+            <!-- Controls Panel -->
+            <div class="controls-panel">
+                <button class="control-btn active" id="mic-btn" title="Toggle Microphone">
+                    <i class="fas fa-microphone"></i>
+                </button>
+                <button class="control-btn active" id="camera-btn" title="Toggle Camera">
+                    <i class="fas fa-video"></i>
+                </button>
+                <button class="control-btn" id="screen-btn" title="Share Screen">
+                    <i class="fas fa-desktop"></i>
+                </button>
+                <button class="control-btn" id="record-btn" title="Record Stream">
+                    <i class="fas fa-record-vinyl"></i>
+                </button>
+                <button class="control-btn" id="effects-btn" title="Video Effects">
+                    <i class="fas fa-magic"></i>
+                </button>
+                <button class="control-btn" id="settings-btn" title="Settings">
+                    <i class="fas fa-cog"></i>
+                </button>
+                <button class="control-btn danger" id="leave-btn" title="Leave Stream">
+                    <i class="fas fa-phone-slash"></i>
+                </button>
+            </div>
+        </main>
+    </div>
+</body>
+</html>
